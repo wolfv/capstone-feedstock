@@ -1,0 +1,143 @@
+context:
+  version: "5.0.9"
+
+recipe:
+  name: capstone-split
+  version: ${{ version }}
+
+source:
+  url: https://github.com/capstone-engine/capstone/archive/${{ version }}.tar.gz
+  sha256: 0619da31af08152600af95c481527ef6d756c0a8404fca7544a4fdf6dfc2c0f9
+  patches:
+    - if: osx
+      then: patches/0001-skip-IS_APPLE-check-on-osx.patch
+    - patches/0002-rely-on-libcapstone-do-not-smuggle-lib-headers-into-.patch
+    - patches/0003-split-build-and-install-steps-for-python-use-prefix.patch
+    # CVE-2026-55893, CVE-2026-55894 (SH backend OOB); from the unreleased v5 branch
+    - patches/0004-V5-Fix-OOB-reads-writes-CVE-2026-55893-CVE-2026-5589.patch
+    # Off-by-one left over from the CVE-2026-49282 backport in 5.0.9
+    - patches/0005-M68K-fix-off-by-one-in-M68K_insn_name-bounds-check.patch
+
+build:
+  number: 4
+
+outputs:
+  - package:
+      name: libcapstone
+    build:
+      script: install-lib
+    requirements:
+      build:
+        - cmake
+        - if: unix
+          then: make
+          else: ninja
+        - ${{ compiler('c') }}
+        - ${{ stdlib('c') }}
+      run_exports:
+        - ${{ pin_subpackage('libcapstone', upper_bound='x.x.x') }}
+    tests:
+      - package_contents:
+          lib:
+            - capstone
+          include:
+            - capstone/capstone.h
+          files:
+            not_exists:
+              - bin/cstool
+              - Library/bin/cstool.exe
+
+  - package:
+      name: cstool
+    build:
+      script: install-lib
+    requirements:
+      build:
+        - cmake
+        - if: unix
+          then: make
+          else: ninja
+        - ${{ compiler('c') }}
+        - ${{ stdlib('c') }}
+      host:
+        - ${{ pin_subpackage('libcapstone', exact=True) }}
+      run:
+        - ${{ pin_subpackage('libcapstone', exact=True) }}
+      run_exports:
+        - ${{ pin_subpackage('libcapstone', upper_bound='x.x.x') }}
+    tests:
+      - package_contents:
+          bin:
+            - cstool
+      - script:
+          - cstool -v
+
+  - package:
+      name: capstone
+    build:
+      script: install-py
+    requirements:
+      build:
+        - if: build_platform != target_platform
+          then:
+            - python
+            - cross-python_${{ target_platform }}
+            - cython
+        - ${{ compiler('c') }}
+        - ${{ stdlib('c') }}
+        - make
+        - cmake
+      host:
+        - python
+        - pip
+        - cython
+        - pthread-stubs
+        - ${{ pin_subpackage('libcapstone', exact=True) }}
+        - setuptools
+      run:
+        - python
+        - setuptools
+        - importlib_resources
+        - ${{ pin_subpackage('libcapstone', exact=True) }}
+    tests:
+      - python:
+          imports:
+            - capstone
+          pip_check: true
+      - package_contents:
+          files:
+            # library & headers come from libcapstone, not vendored into site-packages
+            not_exists:
+              - "**/site-packages/capstone/include/capstone/x86.h"
+              - "**/site-packages/capstone/lib/libcapstone.so"
+              - "**/site-packages/capstone/lib/libcapstone.dylib"
+              - "**/site-packages/capstone/lib/capstone.dll"
+      - files:
+          source:
+            - bindings/python/tests/
+          recipe:
+            - run_test.py
+        requirements:
+          run:
+            - python
+        script:
+          - python run_test.py
+          - python bindings/python/tests/test_all.py
+
+about:
+  homepage: http://www.capstone-engine.org/
+  license: BSD-3-Clause
+  license_file: LICENSE.TXT
+  summary: The Ultimate Disassembler
+  description: |
+    Capstone is a lightweight multi-platform, multi-architecture disassembly framework
+  documentation: http://www.capstone-engine.org/documentation.html
+  repository: https://github.com/capstone-engine/capstone
+
+extra:
+  feedstock-name: capstone
+  recipe-maintainers:
+    - scopatz
+    - CJ-Wright
+    - thewchan
+    - xhochy
