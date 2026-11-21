@@ -15,7 +15,6 @@ Documentation: http://www.capstone-engine.org/documentation.html
 
 Capstone is a lightweight multi-platform, multi-architecture disassembly framework
 
-
 Current build status
 ====================
 
